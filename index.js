@@ -48,7 +48,9 @@ app.post('/webhook/apex-intake', async (req, res) => {
     for (const def of mapping.FIELD_DEFS) {
       const value = def.get(payload);
       if (value === undefined || value === null || value === '') continue;
-      customFields.push({ id: fieldIds[def.key], fieldValue: String(value) });
+      // CHECKBOX-type fields expect an array of selected option labels;
+      // everything else is sent as a plain string.
+      customFields.push({ id: fieldIds[def.key], fieldValue: Array.isArray(value) ? value : String(value) });
     }
 
     // 3. Upsert the contact

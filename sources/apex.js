@@ -5,18 +5,31 @@
 
 export const SOURCE_KEY = 'apex';
 
+export const FOLDERS = {
+  fields: 'Apex - Fields',
+  files: 'Apex - Files',
+};
+
+// Maps this source's internal field key to an ALREADY-EXISTING field key in
+// the GHL account, when one exists, so we reuse it instead of creating a
+// duplicate. Add entries here as duplicates are found — format is
+// { internalKey: 'existingRealFieldKey' }.
+export const FIELD_KEY_OVERRIDES = {
+  apex_documents: 'extra_files',
+};
+
 export const FIELD_DEFS = [
-  { key: 'data_source', label: 'Data Source', dataType: 'TEXT', get: (p) => p.data_source },
-  { key: 'lookup_biz_name', label: 'Lookup Business Name', dataType: 'TEXT', get: (p) => p.lookup_biz_name },
-  { key: 'lookup_phone', label: 'Lookup Phone', dataType: 'PHONE', get: (p) => p.lookup_phone },
-  { key: 'lookup_email', label: 'Lookup Email', dataType: 'TEXT', get: (p) => p.lookup_email },
+  { key: 'data_source', label: 'Data Source', dataType: 'TEXT', folder: FOLDERS.fields, get: (p) => p.data_source },
+  { key: 'lookup_biz_name', label: 'Lookup Business Name', dataType: 'TEXT', folder: FOLDERS.fields, get: (p) => p.lookup_biz_name },
+  { key: 'lookup_phone', label: 'Lookup Phone', dataType: 'PHONE', folder: FOLDERS.fields, get: (p) => p.lookup_phone },
+  { key: 'lookup_email', label: 'Lookup Email', dataType: 'TEXT', folder: FOLDERS.fields, get: (p) => p.lookup_email },
   // NOTE: assigned_to in the sample payload is a placeholder string
   // ("TEST-BROKER-UUID-NOT-REAL"), not a real GHL user ID — stored as a
   // plain text custom field rather than mapped to the native assignedTo
   // field, which requires an actual GHL user ID to take effect. If this is
   // meant to become real broker assignment, tell me and I'll wire it to
   // GHL's assignedTo instead (contacts_update-contact takes assignedTo).
-  { key: 'assigned_broker_ref', label: 'Assigned Broker Reference', dataType: 'TEXT', get: (p) => p.assigned_to },
+  { key: 'assigned_broker_ref', label: 'Assigned Broker Reference', dataType: 'TEXT', folder: FOLDERS.fields, get: (p) => p.assigned_to },
 ];
 
 export const FILE_FIELD_DEFS = [];
@@ -37,9 +50,14 @@ export const MULTI_FILE_FIELDS = [
   {
     key: 'apex_documents',
     label: 'Apex Documents',
+    folder: FOLDERS.files,
     get: (p) => (p.bank_urls || []).map((url) => ({ url, name: filenameFromUrl(url) })),
   },
 ];
+
+for (const def of [...FIELD_DEFS, ...MULTI_FILE_FIELDS]) {
+  if (FIELD_KEY_OVERRIDES[def.key]) def.override = FIELD_KEY_OVERRIDES[def.key];
+}
 
 export function getContactCore(payload) {
   return {
