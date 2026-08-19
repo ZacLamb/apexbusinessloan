@@ -80,11 +80,12 @@ export async function uploadFileToContactField({ contactId, locationId, fieldId,
 
   const uuid = crypto.randomUUID();
   const form = new FormData();
-  form.append('contactId', contactId);
-  form.append('locationId', locationId);
+  // contactId/locationId go in the query string for this endpoint — only
+  // the file buffer(s) go in the multipart body, keyed "<fieldId>_<uuid>".
   form.append(`${fieldId}_${uuid}`, buffer, { filename: fileName || 'document.pdf' });
 
-  const res = await fetch(`${BASE}/forms/upload-custom-files`, {
+  const url = `${BASE}/forms/upload-custom-files?contactId=${encodeURIComponent(contactId)}&locationId=${encodeURIComponent(locationId)}`;
+  const res = await fetch(url, {
     method: 'POST',
     headers: authHeaders(form.getHeaders()),
     body: form,
