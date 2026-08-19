@@ -74,22 +74,29 @@ export async function upsertContact(locationId, body) {
 // FILE_UPLOAD custom field via /forms/upload-custom-files, following the
 // documented {fieldId}_{uuid} multipart part naming.
 export async function uploadFileToContactField({ contactId, locationId, fieldId, fileUrl, fileName }) {
-  const fileRes = await fetch(fileUrl);
-  if (!fileRes.ok) throw new Error(`Failed to download ${fileUrl}: ${fileRes.status}`);
-  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  return uploadFilesToContactField({ contactId, locationId, fieldId, files: [{ url: fileUrl, name: fileName }] });
+}
 
-  const uuid = crypto.randomUUID();
+// Uploads one or more files into the same FILE_UPLOAD custom field in a
+// single multipart request. Doing this in one request (rather than one
+// request per file) avoids relying on unconfirmed append-vs-overwrite
+// behavior on GHL's side for repeated calls to the same field.
+export async function uploadFilesToContactField({ contactId, locationId, fieldId, files }) {
   const form = new FormData();
-  // contactId/locationId go in the query string for this endpoint — only
-  // the file buffer(s) go in the multipart body, keyed "<fieldId>_<uuid>".
-  form.append(`${fieldId}_${uuid}`, buffer, { filename: fileName || 'document.pdf' });
+  for (const { url, name } of files) {
+    const fileRes = await fetch(url);
+    if (!fileRes.ok) throw new Error(`Failed to download ${url}: ${fileRes.status}`);
+    const buffer = Buffer.from(await fileRes.arrayBuffer());
+    const uuid = crypto.randomUUID();
+    form.append(`${fieldId}_${uuid}`, buffer, { filename: name || 'document.pdf' });
+  }
 
-  const url = `${BASE}/forms/upload-custom-files?contactId=${encodeURIComponent(contactId)}&locationId=${encodeURIComponent(locationId)}`;
-  const res = await fetch(url, {
+  const uploadUrl = `${BASE}/forms/upload-custom-files?contactId=${encodeURIComponent(contactId)}&locationId=${encodeURIComponent(locationId)}`;
+  const res = await fetch(uploadUrl, {
     method: 'POST',
     headers: authHeaders(form.getHeaders()),
     body: form,
   });
-  if (!res.ok) throw new Error(`uploadFileToContactField(${fieldId}) failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`uploadFilesToContactField(${fieldId}) failed: ${res.status} ${await res.text()}`);
   return res.json();
 }

@@ -5,7 +5,7 @@
 //   .../webhook/apex-intake?source=business-loans
 
 import express from 'express';
-import { ensureCustomFields, upsertContact, uploadFileToContactField } from './ghl.js';
+import { ensureCustomFields, upsertContact, uploadFilesToContactField } from './ghl.js';
 import * as businessLoans from './sources/businessLoans.js';
 import * as apex from './sources/apex.js';
 
@@ -65,8 +65,13 @@ app.post('/webhook/apex-intake', async (req, res) => {
     const upsertResult = await upsertContact(LOCATION_ID, contactBody);
     const contactId = upsertResult.contact?.id || upsertResult.id;
 
-    // 4. Single-file fields (one file each)
-    const fileResults = [];
+    // 4. File fields — both single-file and multi-file fields use the same
+    // batched call: one HTTP request per field, with every file for that
+    // field included as its own multipart part in that one request. This
+    // avoids relying on unconfirmed append-vs-overwrite behavior for
+    // repeated calls to the same field.
+    let filesUploadedCount = 0;
+
     if (mapping.FILE_FIELD_DEFS?.length) {
       const fileFieldIds = await ensureCustomFields(
         LOCATION_ID,
@@ -75,36 +80,31 @@ app.post('/webhook/apex-intake', async (req, res) => {
       for (const def of mapping.FILE_FIELD_DEFS) {
         const file = def.get(payload);
         if (!file?.url) continue;
-        const result = await uploadFileToContactField({
+        await uploadFilesToContactField({
           contactId,
           locationId: LOCATION_ID,
           fieldId: fileFieldIds[def.key],
-          fileUrl: file.url,
-          fileName: file.name,
+          files: [file],
         });
-        fileResults.push({ key: def.key, ok: true, result });
+        filesUploadedCount += 1;
       }
     }
 
-    // 5. Multi-file fields (array of files into one FILE_UPLOAD field)
     if (mapping.MULTI_FILE_FIELDS?.length) {
       const multiFieldIds = await ensureCustomFields(
         LOCATION_ID,
         mapping.MULTI_FILE_FIELDS.map((f) => ({ key: f.key, label: f.label, dataType: 'FILE_UPLOAD' }))
       );
       for (const def of mapping.MULTI_FILE_FIELDS) {
-        const files = def.get(payload) || [];
-        for (const file of files) {
-          if (!file?.url) continue;
-          const result = await uploadFileToContactField({
-            contactId,
-            locationId: LOCATION_ID,
-            fieldId: multiFieldIds[def.key],
-            fileUrl: file.url,
-            fileName: file.name,
-          });
-          fileResults.push({ key: def.key, ok: true, result });
-        }
+        const files = (def.get(payload) || []).filter((f) => f?.url);
+        if (!files.length) continue;
+        await uploadFilesToContactField({
+          contactId,
+          locationId: LOCATION_ID,
+          fieldId: multiFieldIds[def.key],
+          files,
+        });
+        filesUploadedCount += files.length;
       }
     }
 
@@ -114,7 +114,7 @@ app.post('/webhook/apex-intake', async (req, res) => {
       test: testFlag,
       contactId,
       fieldsMapped: customFields.length,
-      filesUploaded: fileResults.length,
+      filesUploaded: filesUploadedCount,
     });
   } catch (err) {
     console.error(err);
