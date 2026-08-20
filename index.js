@@ -89,12 +89,15 @@ app.post('/webhook/apex-intake', async (req, res) => {
     const contactId = upsertResult.contact?.id || upsertResult.id;
 
     // Fire-and-forget notification to the leads dashboard — doesn't block
-    // or affect the response either way.
+    // or affect the response either way. Sends the full raw intake payload
+    // now (not just the safe summary) since the dashboard is showing
+    // complete lead detail, per explicit instruction.
     notifyDashboard({
       ghlContactId: contactId,
       source: sourceKey,
       isTest: testFlag,
       ...mapping.getDashboardSummary(payload),
+      rawPayload: payload,
     });
 
     // 4. File fields — both single-file and multi-file fields use the same
