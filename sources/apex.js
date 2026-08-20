@@ -69,6 +69,18 @@ export function getContactCore(payload) {
   };
 }
 
+// Summary sent to the leads dashboard — deliberately minimal, no sensitive
+// fields, since that board is a public link.
+export function getDashboardSummary(payload) {
+  return {
+    businessName: payload.lookup_biz_name,
+    contactName: undefined,
+    email: payload.main_email,
+    phone: payload.main_phone,
+    amountRequested: undefined,
+  };
+}
+
 export function isTestPayload(payload) {
   return /^TEST\b/i.test(payload.lookup_biz_name || '');
 }

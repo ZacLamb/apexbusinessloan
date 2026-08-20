@@ -14,6 +14,27 @@ app.use(express.json({ limit: '10mb' }));
 
 const LOCATION_ID = process.env.GHL_LOCATION_ID;
 const API_KEY = process.env.WEBHOOK_API_KEY; // optional shared-secret check
+const DASHBOARD_URL = process.env.DASHBOARD_URL; // e.g. https://leads-dashboard-production.up.railway.app
+const DASHBOARD_API_KEY = process.env.DASHBOARD_API_KEY;
+
+// Best-effort notification to the leads dashboard — never throws, never
+// blocks or fails the main webhook response. If DASHBOARD_URL isn't set,
+// this is a silent no-op.
+async function notifyDashboard(payload) {
+  if (!DASHBOARD_URL) return;
+  try {
+    await fetch(`${DASHBOARD_URL}/webhook/lead-created`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(DASHBOARD_API_KEY ? { 'X-API-Key': DASHBOARD_API_KEY } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.error('Dashboard notify failed (non-fatal):', err.message);
+  }
+}
 
 const SOURCES = {
   apex,
@@ -66,6 +87,15 @@ app.post('/webhook/apex-intake', async (req, res) => {
     };
     const upsertResult = await upsertContact(LOCATION_ID, contactBody);
     const contactId = upsertResult.contact?.id || upsertResult.id;
+
+    // Fire-and-forget notification to the leads dashboard — doesn't block
+    // or affect the response either way.
+    notifyDashboard({
+      ghlContactId: contactId,
+      source: sourceKey,
+      isTest: testFlag,
+      ...mapping.getDashboardSummary(payload),
+    });
 
     // 4. File fields — both single-file and multi-file fields use the same
     // batched call: one HTTP request per field, with every file for that

@@ -173,6 +173,19 @@ export function getContactCore(payload) {
   };
 }
 
+// Summary sent to the leads dashboard — deliberately minimal (no SSNs, tax
+// IDs, or other sensitive fields), since that board is a public link.
+export function getDashboardSummary(payload) {
+  const p = pi(payload);
+  return {
+    businessName: b(payload).legalCompanyName,
+    contactName: [p.firstName, p.lastName].filter(Boolean).join(' ') || undefined,
+    email: p.email,
+    phone: p.phoneNumber,
+    amountRequested: b(payload).amountRequested,
+  };
+}
+
 export function isTestPayload(payload) {
   return /^TEST\b/i.test(b(payload).legalCompanyName || '');
 }
