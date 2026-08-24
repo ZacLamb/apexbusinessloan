@@ -61,8 +61,8 @@ for (const def of [...FIELD_DEFS, ...MULTI_FILE_FIELDS]) {
 
 export function getContactCore(payload) {
   return {
-    firstName: undefined,
-    lastName: undefined,
+    firstName: payload.first_name,
+    lastName: payload.last_name,
     email: payload.main_email,
     phone: payload.main_phone,
     companyName: payload.lookup_biz_name,
@@ -74,7 +74,7 @@ export function getContactCore(payload) {
 export function getDashboardSummary(payload) {
   return {
     businessName: payload.lookup_biz_name,
-    contactName: undefined,
+    contactName: [payload.first_name, payload.last_name].filter(Boolean).join(' ') || undefined,
     email: payload.main_email,
     phone: payload.main_phone,
     amountRequested: undefined,
