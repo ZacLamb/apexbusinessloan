@@ -32,6 +32,10 @@ const TO_DELETE = [
   { id: 'iJ1hROHZ6thstqmX5Dht', name: 'Co-Owner Email', duplicateOf: 'partner_email' },
   { id: 'lGOyd4Ey0Qwe2Zs5GDNz', name: 'Bank Statements', duplicateOf: 'bank_statement_1..10 (restructured, no longer a single multi-file field)' },
   { id: 'kOqqMNWs3V10FSIN2k0o', name: 'Apex Documents', duplicateOf: 'extra_files' },
+  { id: 'cgEP4IJziGm6lrSr37dE', name: 'Reason for Funding', duplicateOf: 'use_of_funds' },
+  { id: 'mNMrvdZN3bvS7b23EXiJ', name: 'Any Open Liens or Judgments', duplicateOf: 'liens_detail__explanation' },
+  { id: 'QYDwgZPOVorYlYQHn0wS', name: 'Co-Owner First Name', duplicateOf: 'partner_name (merged into coowner_full_name)' },
+  { id: 'aary8dUmqbjpUlqO8oV1', name: 'Co-Owner Last Name', duplicateOf: 'partner_name (merged into coowner_full_name)' },
 ];
 
 async function main() {

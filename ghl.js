@@ -161,18 +161,72 @@ export async function uploadFileToContactField({ contactId, locationId, fieldId,
   return uploadFilesToContactField({ contactId, locationId, fieldId, files: [{ url: fileUrl, name: fileName }] });
 }
 
+// Common content-types -> file extension, used when we need to construct a
+// filename that actually carries the right extension (GHL's upload
+// endpoint rejects files whose type it can't determine, and a missing or
+// wrong extension is exactly what causes that — even when the file itself
+// downloads and opens fine).
+const EXT_BY_CONTENT_TYPE = {
+  'application/pdf': 'pdf',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+};
+
+function ensureFilenameHasExtension(name, contentType) {
+  const base = name || 'document';
+  const hasExtension = /\.[a-zA-Z0-9]{2,5}$/.test(base);
+  if (hasExtension) return base;
+  const ext = EXT_BY_CONTENT_TYPE[contentType?.split(';')[0]?.trim()] || 'pdf';
+  return `${base}.${ext}`;
+}
+
 // Uploads one or more files into the same FILE_UPLOAD custom field in a
 // single multipart request. Doing this in one request (rather than one
 // request per file) avoids relying on unconfirmed append-vs-overwrite
 // behavior on GHL's side for repeated calls to the same field.
+//
+// Content type is read from the actual HTTP response when the file is
+// downloaded, NOT guessed from the URL or a filename — GHL's document
+// download URLs (services.leadconnectorhq.com/documents/download/...)
+// carry no filename/extension at all, so guessing from the URL produces an
+// extension-less filename that GHL's upload endpoint rejects as an
+// "Invalid File Type" even though the file itself is perfectly valid.
+//
+// GHL's own document-storage URLs also require authentication to actually
+// serve the file — an unauthenticated fetch gets back an error/redirect
+// page instead of the real document, which then (correctly) gets rejected
+// on upload since it isn't actually a valid file. So requests to GHL's own
+// domain carry the PIT token; third-party URLs (test payloads, external
+// storage) are fetched as before, with no auth header.
+function isGhlUrl(url) {
+  try {
+    return new URL(url).hostname.endsWith('leadconnectorhq.com');
+  } catch {
+    return false;
+  }
+}
+
 export async function uploadFilesToContactField({ contactId, locationId, fieldId, files }) {
   const form = new FormData();
   for (const { url, name } of files) {
-    const fileRes = await fetch(url);
+    const fileRes = await fetch(url, {
+      headers: isGhlUrl(url) ? { Authorization: `Bearer ${process.env.GHL_PIT_TOKEN}` } : undefined,
+    });
     if (!fileRes.ok) throw new Error(`Failed to download ${url}: ${fileRes.status}`);
+    const contentType = fileRes.headers.get('content-type');
     const buffer = Buffer.from(await fileRes.arrayBuffer());
     const uuid = crypto.randomUUID();
-    form.append(`${fieldId}_${uuid}`, buffer, { filename: name || 'document.pdf' });
+    const filename = ensureFilenameHasExtension(name, contentType);
+    form.append(`${fieldId}_${uuid}`, buffer, {
+      filename,
+      contentType: contentType?.split(';')[0]?.trim() || 'application/pdf',
+    });
   }
 
   const uploadUrl = `${BASE}/forms/upload-custom-files?contactId=${encodeURIComponent(contactId)}&locationId=${encodeURIComponent(locationId)}`;
