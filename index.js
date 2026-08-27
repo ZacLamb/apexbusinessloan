@@ -61,6 +61,18 @@ app.post('/webhook/apex-intake', async (req, res) => {
     const testFlag = mapping.isTestPayload(payload);
     const core = mapping.getContactCore(payload);
 
+    // GHL's contact upsert requires at least one of email/phone to identify
+    // the contact — failing fast here with a clear message beats letting it
+    // hit GHL's API and getting back a generic "Pass at least one of
+    // number, email" error that doesn't say which lead or why.
+    if (!core.email && !core.phone) {
+      console.error('Rejecting payload with no email and no phone:', JSON.stringify(payload));
+      return res.status(400).json({
+        ok: false,
+        error: 'Payload has neither an email nor a phone number — GHL requires at least one to identify the contact. This lead was not processed.',
+      });
+    }
+
     // 1. Ensure this source's scalar custom fields exist (creates any missing)
     const fieldIds = await ensureCustomFields(LOCATION_ID, mapping.FIELD_DEFS);
 

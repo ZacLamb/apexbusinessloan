@@ -212,13 +212,29 @@ function isGhlUrl(url) {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Downloads a file, retrying on 5xx responses — these are gateway/proxy
+// errors (502/503/504), often transient, distinct from 4xx which won't
+// succeed on retry (bad URL, expired signed link, etc.) and fail
+// immediately instead of wasting time retrying those.
+async function downloadWithRetry(url, headers, maxRetries = 2) {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const fileRes = await fetch(url, { headers });
+    if (fileRes.ok) return fileRes;
+    lastError = new Error(`Failed to download ${url}: ${fileRes.status}`);
+    if (fileRes.status < 500 || attempt === maxRetries) throw lastError;
+    console.log(`Download got ${fileRes.status}, retrying (attempt ${attempt + 1}/${maxRetries})...`);
+    await sleep(1000 * (attempt + 1));
+  }
+  throw lastError;
+}
+
 export async function uploadFilesToContactField({ contactId, locationId, fieldId, files }) {
   const form = new FormData();
   for (const { url, name } of files) {
-    const fileRes = await fetch(url, {
-      headers: isGhlUrl(url) ? { Authorization: `Bearer ${process.env.GHL_PIT_TOKEN}` } : undefined,
-    });
-    if (!fileRes.ok) throw new Error(`Failed to download ${url}: ${fileRes.status}`);
+    const fileRes = await downloadWithRetry(url, isGhlUrl(url) ? { Authorization: `Bearer ${process.env.GHL_PIT_TOKEN}` } : undefined);
     const contentType = fileRes.headers.get('content-type');
     const buffer = Buffer.from(await fileRes.arrayBuffer());
     const uuid = crypto.randomUUID();
