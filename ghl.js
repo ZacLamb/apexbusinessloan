@@ -154,6 +154,19 @@ export async function upsertContact(locationId, body) {
   return res.json();
 }
 
+// Creates or updates an opportunity for a contact within a pipeline in one
+// call — avoids duplicate opportunities on repeated webhook hits for the
+// same contact/pipeline.
+export async function upsertOpportunity(locationId, { pipelineId, pipelineStageId, contactId, name, status = 'open' }) {
+  const res = await fetch(`${BASE}/opportunities/upsert`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ locationId, pipelineId, pipelineStageId, contactId, name, status }),
+  });
+  if (!res.ok) throw new Error(`upsertOpportunity failed: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
 // Downloads a file from an external URL and uploads it into a contact's
 // FILE_UPLOAD custom field via /forms/upload-custom-files, following the
 // documented {fieldId}_{uuid} multipart part naming.

@@ -5,7 +5,7 @@
 //   .../webhook/apex-intake?source=business-loans
 
 import express from 'express';
-import { ensureCustomFields, upsertContact, uploadFilesToContactField } from './ghl.js';
+import { ensureCustomFields, upsertContact, uploadFilesToContactField, upsertOpportunity } from './ghl.js';
 import * as businessLoans from './sources/businessLoans.js';
 import * as apex from './sources/apex.js';
 
@@ -100,6 +100,16 @@ app.post('/webhook/apex-intake', async (req, res) => {
     const upsertResult = await upsertContact(LOCATION_ID, contactBody);
     const contactId = upsertResult.contact?.id || upsertResult.id;
 
+    // Place the contact's opportunity in the right pipeline/stage, when
+    // this source defines one (currently Business Loans only — Apex has no
+    // getOpportunityTarget, so this is skipped for it entirely).
+    let opportunityId;
+    if (typeof mapping.getOpportunityTarget === 'function') {
+      const oppTarget = mapping.getOpportunityTarget(payload);
+      const oppResult = await upsertOpportunity(LOCATION_ID, { ...oppTarget, contactId });
+      opportunityId = oppResult.opportunity?.id || oppResult.id;
+    }
+
     // Fire-and-forget notification to the leads dashboard — doesn't block
     // or affect the response either way. Sends the full raw intake payload
     // now (not just the safe summary) since the dashboard is showing
@@ -160,6 +170,7 @@ app.post('/webhook/apex-intake', async (req, res) => {
       source: sourceKey,
       test: testFlag,
       contactId,
+      opportunityId,
       fieldsMapped: customFields.length,
       filesUploaded: filesUploadedCount,
     });

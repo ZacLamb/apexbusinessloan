@@ -4,9 +4,45 @@ export const SOURCE_KEY = 'business-loans';
 export const MAX_LENDER_POSITIONS = Number(process.env.MAX_LENDER_POSITIONS || 4);
 export const MAX_COLLATERAL_PROPERTIES = Number(process.env.MAX_COLLATERAL_PROPERTIES || 3);
 
+// Pipeline/stage IDs pulled directly from this account's real
+// /opportunities/pipelines response — not guessed.
+export const PIPELINES = {
+  preSubmission: {
+    id: 'AfSzEV0LLfbk40nH2v7q',
+    stageId: 'cadd4246-18eb-4859-b205-0fe1675c31a7', // "Hot Lead"
+  },
+  submissions: {
+    id: 'o8quineMFfs02dT7teNC',
+    stageId: '99163204-aff1-45aa-82b8-8dfe093565e7', // "Application Submitted"
+  },
+};
+
 const b = (p) => p.businessInformation || {};
 const pi = (p) => p.personalInformation || {};
 const co = (p) => p.coOwner || {};
+
+// True when the payload includes any actual submitted file — application,
+// bank statements, or either signature. Used to decide which pipeline the
+// opportunity belongs in: no files means the lead hasn't actually applied
+// yet (Pre Submission Pipeline), any file present means they have
+// (Submissions Pipeline, "Application Submitted").
+export function hasSubmission(payload) {
+  return Boolean(
+    payload.App?.length || payload.bankStatements?.length || payload.Signature1?.length || payload.Signature2?.length
+  );
+}
+
+// Which pipeline/stage this lead's opportunity should be upserted into,
+// and what to name it.
+export function getOpportunityTarget(payload) {
+  const target = hasSubmission(payload) ? PIPELINES.submissions : PIPELINES.preSubmission;
+  const businessName = b(payload).legalCompanyName || 'Unknown Business';
+  return {
+    pipelineId: target.id,
+    pipelineStageId: target.stageId,
+    name: `${businessName} - Business Loan`,
+  };
+}
 
 // Maps this source's internal field key to an ALREADY-EXISTING field key in
 // the GHL account, when one exists, so we reuse it instead of creating a
