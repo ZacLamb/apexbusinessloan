@@ -154,17 +154,73 @@ export async function upsertContact(locationId, body) {
   return res.json();
 }
 
-// Creates or updates an opportunity for a contact within a pipeline in one
-// call — avoids duplicate opportunities on repeated webhook hits for the
-// same contact/pipeline.
-export async function upsertOpportunity(locationId, { pipelineId, pipelineStageId, contactId, name, status = 'open' }) {
-  const res = await fetch(`${BASE}/opportunities/upsert`, {
+// Searches opportunities for a contact — optionally scoped to a specific
+// pipeline, but by default across all of them so an existing opportunity
+// in a DIFFERENT pipeline can be found and moved rather than duplicated.
+export async function searchOpportunities(locationId, { contactId, pipelineId }) {
+  const params = new URLSearchParams({ locationId, contactId });
+  if (pipelineId) params.set('pipelineId', pipelineId);
+  const res = await fetch(`${BASE}/opportunities/search?${params.toString()}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`searchOpportunities failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return data.opportunities || [];
+}
+
+export async function createOpportunity(locationId, { pipelineId, pipelineStageId, contactId, name, status = 'open' }) {
+  const res = await fetch(`${BASE}/opportunities/`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ locationId, pipelineId, pipelineStageId, contactId, name, status }),
   });
-  if (!res.ok) throw new Error(`upsertOpportunity failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`createOpportunity failed: ${res.status} ${await res.text()}`);
   return res.json();
+}
+
+export async function updateOpportunity(opportunityId, { pipelineId, pipelineStageId, name, status }) {
+  const body = {};
+  if (pipelineId) body.pipelineId = pipelineId;
+  if (pipelineStageId) body.pipelineStageId = pipelineStageId;
+  if (name) body.name = name;
+  if (status) body.status = status;
+  const res = await fetch(`${BASE}/opportunities/${opportunityId}`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`updateOpportunity(${opportunityId}) failed: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+// Explicit find-then-create-or-update for placing a contact's opportunity
+// in the right pipeline/stage. This deliberately does NOT use GHL's
+// /opportunities/upsert endpoint — its match/dedupe behavior isn't
+// reliably documented (GHL's own docs don't specify what identifies an
+// "existing" opportunity for that endpoint), and it was observed creating
+// duplicate opportunities in practice instead of updating an existing one.
+//
+// trackedPipelineIds scopes the search to only the pipelines this source
+// manages (e.g. Pre Submission + Submissions for Business Loans), so an
+// unrelated opportunity the contact might have in some other pipeline is
+// never touched. If more than one matching opportunity is somehow already
+// found (e.g. left over from before this fix), the most recently updated
+// one is used and the rest are left alone rather than silently deleted.
+//
+// Note: this doesn't fully close a race between two near-simultaneous
+// webhook calls for the same brand-new contact (both could search, find
+// nothing, and both create) — a much narrower case than "no lookup at
+// all," which is what was actually happening before.
+export async function placeOpportunity(locationId, { contactId, pipelineId, pipelineStageId, name, trackedPipelineIds }) {
+  const existing = await searchOpportunities(locationId, { contactId });
+  const relevant = existing.filter((o) => trackedPipelineIds.includes(o.pipelineId));
+  relevant.sort((a, b) => new Date(b.updatedAt || b.dateAdded || 0) - new Date(a.updatedAt || a.dateAdded || 0));
+  const current = relevant[0];
+
+  if (current) {
+    return updateOpportunity(current.id, { pipelineId, pipelineStageId, name, status: 'open' });
+  }
+  return createOpportunity(locationId, { pipelineId, pipelineStageId, contactId, name });
 }
 
 // Downloads a file from an external URL and uploads it into a contact's

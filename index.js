@@ -5,7 +5,7 @@
 //   .../webhook/apex-intake?source=business-loans
 
 import express from 'express';
-import { ensureCustomFields, upsertContact, uploadFilesToContactField, upsertOpportunity } from './ghl.js';
+import { ensureCustomFields, upsertContact, uploadFilesToContactField, placeOpportunity } from './ghl.js';
 import * as businessLoans from './sources/businessLoans.js';
 import * as apex from './sources/apex.js';
 
@@ -102,11 +102,17 @@ app.post('/webhook/apex-intake', async (req, res) => {
 
     // Place the contact's opportunity in the right pipeline/stage, when
     // this source defines one (currently Business Loans only — Apex has no
-    // getOpportunityTarget, so this is skipped for it entirely).
+    // getOpportunityTarget, so this is skipped for it entirely). Uses an
+    // explicit search-then-create-or-update rather than GHL's own
+    // /opportunities/upsert, which was observed creating duplicates.
     let opportunityId;
     if (typeof mapping.getOpportunityTarget === 'function') {
       const oppTarget = mapping.getOpportunityTarget(payload);
-      const oppResult = await upsertOpportunity(LOCATION_ID, { ...oppTarget, contactId });
+      const oppResult = await placeOpportunity(LOCATION_ID, {
+        ...oppTarget,
+        contactId,
+        trackedPipelineIds: mapping.TRACKED_PIPELINE_IDS,
+      });
       opportunityId = oppResult.opportunity?.id || oppResult.id;
     }
 

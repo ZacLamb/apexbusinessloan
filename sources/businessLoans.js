@@ -17,6 +17,11 @@ export const PIPELINES = {
   },
 };
 
+// The pipelines this source manages — used to scope opportunity search so
+// an unrelated opportunity the contact might have elsewhere is never
+// touched.
+export const TRACKED_PIPELINE_IDS = [PIPELINES.preSubmission.id, PIPELINES.submissions.id];
+
 const b = (p) => p.businessInformation || {};
 const pi = (p) => p.personalInformation || {};
 const co = (p) => p.coOwner || {};
