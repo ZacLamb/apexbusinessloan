@@ -26,14 +26,26 @@ const b = (p) => p.businessInformation || {};
 const pi = (p) => p.personalInformation || {};
 const co = (p) => p.coOwner || {};
 
+// True when an array actually contains a real file — not just present as
+// a key, but has an entry with a real, non-empty url. Some senders include
+// these keys as empty-placeholder arrays (e.g. [{url: "", name: ""}])
+// rather than omitting them entirely when nothing's been uploaded, so
+// checking .length alone would incorrectly count that as "submitted."
+function hasRealFile(arr) {
+  return Array.isArray(arr) && arr.some((f) => f && f.url);
+}
+
 // True when the payload includes any actual submitted file — application,
 // bank statements, or either signature. Used to decide which pipeline the
 // opportunity belongs in: no files means the lead hasn't actually applied
 // yet (Pre Submission Pipeline), any file present means they have
 // (Submissions Pipeline, "Application Submitted").
 export function hasSubmission(payload) {
-  return Boolean(
-    payload.App?.length || payload.bankStatements?.length || payload.Signature1?.length || payload.Signature2?.length
+  return (
+    hasRealFile(payload.App) ||
+    hasRealFile(payload.bankStatements) ||
+    hasRealFile(payload.Signature1) ||
+    hasRealFile(payload.Signature2)
   );
 }
 
